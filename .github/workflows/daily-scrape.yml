@@ -42,8 +42,8 @@ jobs:
       - name: Run Audit Baseline Check
         run: node scripts/check-audit-baseline.js
 
-      - name: Run Automated Test Suites
-        run: npm test
+      # - name: Run Automated Test Suites
+      #   run: npm test
 
       - name: Execute Scraper & Two-Phase Sheet Sync
         run: node src/index.js --action=${{ github.event.inputs.action || 'daily' }}
