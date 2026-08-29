@@ -1,8 +1,8 @@
 name: Daily UGC Contest Tracker
 
 on:
-  schedule:
-    - cron: '15 1 * * *'       # 08:15 AM VN (01:15 UTC)
+  # schedule:
+  #   - cron: '15 1 * * *'       # 08:15 AM VN (01:15 UTC)
   workflow_dispatch:
     inputs:
       action:
