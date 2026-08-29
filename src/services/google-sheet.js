@@ -151,7 +151,9 @@ async function readSourceFormSubmissions(sheets, spreadsheetId) {
   let timestampIdx = headers.findIndex(h => h.includes('thời gian') || h.includes('timestamp') || h.includes('date'));
   let nameIdx = headers.findIndex(h => h.includes('họ và tên') || h.includes('họ tên') || h.includes('tên') || h.includes('name'));
   let phoneIdx = headers.findIndex(h => h.includes('sđt') || h.includes('số điện thoại') || h.includes('điện thoại') || h.includes('phone'));
-  let linkIdx = headers.findIndex(h => h.includes('link') || h.includes('video') || h.includes('liên kết') || h.includes('url') || h.includes('dự thi') || h.includes('bài thi'));
+  
+  let canonicalLinkIdx = headers.findIndex(h => h.includes('link chuẩn') || h.includes('link bung') || h.includes('link thật'));
+  let linkIdx = headers.findIndex(h => h.includes('link') || h.includes('video') || h.includes('liên kết') || h.includes('url') || h.includes('dự thi') || h.includes('bài thi') || h.includes('gốc'));
 
   if (timestampIdx === -1) timestampIdx = 0;
   if (nameIdx === -1) nameIdx = 1;
@@ -161,10 +163,16 @@ async function readSourceFormSubmissions(sheets, spreadsheetId) {
   const submissions = [];
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
+    if (!r || r.length === 0) continue;
+
     const rawTimestamp = r[timestampIdx] ? String(r[timestampIdx]).trim() : '';
     const rawName = r[nameIdx] ? String(r[nameIdx]).trim() : '';
     const rawPhone = r[phoneIdx] ? String(r[phoneIdx]).trim() : '';
-    const rawLink = r[linkIdx] ? String(r[linkIdx]).trim() : '';
+    
+    // Fallback: Ưu tiên lấy Link chuẩn (nếu có dữ liệu), không thì lấy Link gốc
+    const valCanonical = canonicalLinkIdx !== -1 && r[canonicalLinkIdx] ? String(r[canonicalLinkIdx]).trim() : '';
+    const valOriginal = r[linkIdx] ? String(r[linkIdx]).trim() : '';
+    const rawLink = valCanonical || valOriginal || '';
 
     if (rawLink || rawPhone || rawName) {
       submissions.push({
