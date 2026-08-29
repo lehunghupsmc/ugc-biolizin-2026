@@ -1,0 +1,24 @@
+{
+  "name": "ugc-biolizin-tracker",
+  "version": "1.0.0",
+  "description": "Automated UGC Contest Ranking Tracker for Biolizin",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "scrape": "node src/index.js --action=daily",
+    "finalize": "node src/index.js --action=finalize",
+    "test": "node --test tests/unit/**/*.test.js",
+    "test:integration:staging": "node --test tests/integration/**/*.integration.test.js"
+  },
+  "keywords": ["ugc", "biolizin", "contest", "ranking", "tiktok", "facebook", "scraper"],
+  "author": "Biolizin Team",
+  "license": "ISC",
+  "dependencies": {
+    "apify-client": "^2.11.0",
+    "dotenv": "^16.4.7",
+    "googleapis": "^144.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

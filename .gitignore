@@ -1,0 +1,7 @@
+node_modules/
+.env
+.env.local
+*.log
+ugc-biolizin-key.json
+credentials/
+data/
