@@ -36,9 +36,7 @@ async function scrapeTikTokBatch(videoUrls) {
     };
 
     console.log(`[TikTokScraper] Triggering Apify actor for ${videoUrls.length} videos...`);
-    const run = await client.actor('clockworks/free-tiktok-scraper').call(input, {
-      timeoutSecs: 300
-    });
+    const run = await client.actor('clockworks/free-tiktok-scraper').call(input);
 
     const { items } = await client.dataset(run.defaultDatasetId).listItems();
 
