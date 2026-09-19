@@ -10,13 +10,22 @@
     "test": "node --test tests/unit/**/*.test.js",
     "test:integration:staging": "node --test tests/integration/**/*.integration.test.js"
   },
-  "keywords": ["ugc", "biolizin", "contest", "ranking", "tiktok", "facebook", "scraper"],
+  "keywords": [
+    "ugc",
+    "biolizin",
+    "contest",
+    "ranking",
+    "tiktok",
+    "facebook",
+    "scraper"
+  ],
   "author": "Biolizin Team",
   "license": "ISC",
   "dependencies": {
     "apify-client": "^2.11.0",
     "dotenv": "^16.4.7",
-    "googleapis": "^144.0.0"
+    "googleapis": "^144.0.0",
+    "sharp": "^0.35.4"
   },
   "engines": {
     "node": ">=20.0.0"

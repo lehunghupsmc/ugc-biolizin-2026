@@ -218,7 +218,7 @@ function calculateRanking(contestantVideoData) {
     else if (rankNum === 2) rankBadge = '🥈 2';
     else if (rankNum === 3) rankBadge = '🥉 3';
 
-    const userDisplay = `${c.name} (${c.phoneMasked})`;
+    const userDisplay = c.phoneMasked || '098***...';
     const isoTime = c.primaryTimestamp ? new Date(c.primaryTimestamp).toISOString() : '';
 
     publicBxhRows.push([

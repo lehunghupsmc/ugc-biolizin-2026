@@ -6,6 +6,7 @@ const { computeCanonicalPublicHash, updateLkgRecord } = require('./services/lkg-
 const { publishGithubSummary, alertOnFailure } = require('./services/reporter');
 const { scrapeTikTokBatch } = require('./scrapers/tiktok');
 const { scrapeFacebookBatch } = require('./scrapers/facebook');
+const { generateLeaderboardImage } = require('./services/image-generator');
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -295,9 +296,17 @@ async function main() {
     console.log(`[Main] 3️⃣ Phase 3: Confirming PUBLISHED status in System_Meta...`);
     await googleSheet.confirmPhase3Published(sheets, internalSheetId, runId);
 
+    // 12. PHASE 4: Sinh ảnh BXH Top 20 cho Landing Page
+    try {
+      console.log(`[Main] 🖼️ Phase 4: Generating Leaderboard Image for Landing Page...`);
+      await generateLeaderboardImage(rankedContestants.slice(0, 20));
+    } catch (imgErr) {
+      console.error('[Main] ⚠️ Failed to generate leaderboard image:', imgErr.message);
+    }
+
     const completedTime = new Date();
 
-    // 12. Xuất báo cáo tổng kết
+    // 13. Xuất báo cáo tổng kết
     publishGithubSummary({
       runId,
       action,

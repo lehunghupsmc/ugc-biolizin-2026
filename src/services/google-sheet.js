@@ -133,51 +133,95 @@ async function ensureInternalTabsExist(sheets, spreadsheetId) {
 }
 
 /**
- * Đọc toàn bộ dữ liệu từ Sheet Nguồn (Google Form) bằng range mở A:Z.
+ * Đọc dữ liệu từ Sheet Nguồn (mặc định tab 'gop_du_lieu' range M:P).
  */
 async function readSourceFormSubmissions(sheets, spreadsheetId) {
   const meta = await getSheetMeta(sheets, spreadsheetId);
-  const formTab = Object.keys(meta)[0] || 'Sheet1';
+  const existingTabs = Object.keys(meta);
+  
+  const targetTabName = config.SOURCE_TAB_NAME || 'gop_du_lieu';
+  const targetRange = config.SOURCE_RANGE || 'M:P';
+
+  // 1. Ưu tiên tìm tab 'gop_du_lieu' (không phân biệt hoa thường)
+  let formTab = existingTabs.find(t => t.trim().toLowerCase() === targetTabName.toLowerCase());
+  if (!formTab) {
+    formTab = existingTabs.find(t => t.toLowerCase().includes('gop') || t.toLowerCase().includes('du_lieu')) || existingTabs[0] || 'Sheet1';
+  }
+
+  const rangeQuery = `${formTab}!${targetRange}`;
+  console.log(`[GoogleSheet] Reading source submissions from: ${rangeQuery}`);
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${formTab}!A:Z`
+    range: rangeQuery
   });
 
   const rows = res.data.values || [];
-  if (rows.length < 2) return [];
+  if (rows.length === 0) return [];
 
-  const headers = rows[0].map(h => String(h).toLowerCase().trim());
-  let timestampIdx = headers.findIndex(h => h.includes('thời gian') || h.includes('timestamp') || h.includes('date'));
-  let nameIdx = headers.findIndex(h => h.includes('họ và tên') || h.includes('họ tên') || h.includes('tên') || h.includes('name'));
-  let phoneIdx = headers.findIndex(h => h.includes('sđt') || h.includes('số điện thoại') || h.includes('điện thoại') || h.includes('phone'));
-  
+  // Tự động phân tích các cột trong range
+  const headerRow = rows[0] || [];
+  const headers = headerRow.map(h => String(h).toLowerCase().trim());
+
+  let timestampIdx = headers.findIndex(h => h.includes('thời gian') || h.includes('timestamp') || h.includes('date') || h.includes('ngày') || h.includes('thoi_gian'));
+  let phoneIdx = headers.findIndex(h => h.includes('sđt') || h.includes('số điện thoại') || h.includes('điện thoại') || h.includes('phone') || h.includes('so_dien_thoai'));
   let canonicalLinkIdx = headers.findIndex(h => h.includes('link chuẩn') || h.includes('link bung') || h.includes('link thật'));
-  let linkIdx = headers.findIndex(h => h.includes('link') || h.includes('video') || h.includes('liên kết') || h.includes('url') || h.includes('dự thi') || h.includes('bài thi') || h.includes('gốc'));
+  let linkIdx = headers.findIndex(h => h.includes('link_bai_thi') || h.includes('bài thi') || h.includes('dự thi') || h.includes('link') || h.includes('video') || h.includes('liên kết') || h.includes('url') || h.includes('gốc'));
 
-  if (timestampIdx === -1) timestampIdx = 0;
-  if (nameIdx === -1) nameIdx = 1;
-  if (phoneIdx === -1) phoneIdx = 2;
-  if (linkIdx === -1) linkIdx = 3;
+  // Heuristic Fallback: Quét các dòng dữ liệu mẫu để tự nhận diện cột nếu header không khớp
+  if (phoneIdx === -1 || linkIdx === -1) {
+    const numCols = rows[0] ? rows[0].length : 4;
+    for (let col = 0; col < numCols; col++) {
+      for (let rIdx = 0; rIdx < Math.min(rows.length, 10); rIdx++) {
+        const cell = String(rows[rIdx]?.[col] || '').trim();
+        if (!cell) continue;
+
+        // Nhận diện link video
+        if (linkIdx === -1 && (cell.includes('tiktok.com') || cell.includes('facebook.com') || cell.includes('fb.watch') || cell.startsWith('http://') || cell.startsWith('https://'))) {
+          linkIdx = col;
+        }
+
+        // Nhận diện số điện thoại (9-11 số)
+        const cleanPhone = cell.replace(/[\s.-]/g, '');
+        if (phoneIdx === -1 && /(^(0|\+?84)[3|5|7|8|9][0-9]{8}$)/.test(cleanPhone)) {
+          phoneIdx = col;
+        }
+
+        // Nhận diện thời gian
+        if (timestampIdx === -1 && (/\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(cell) || /\d{1,2}[-/]\d{1,2}[-/]\d{4}/.test(cell))) {
+          timestampIdx = col;
+        }
+      }
+    }
+  }
+
+  if (phoneIdx === -1) phoneIdx = 0;
+  if (linkIdx === -1) linkIdx = rows[0] && rows[0].length > 1 ? rows[0].length - 1 : 1;
+
+  // Kiểm tra dòng đầu có phải header không
+  const firstRowIsHeader = headers.some(h => h.includes('link') || h.includes('sđt') || h.includes('phone') || h.includes('stt') || h.includes('nền tảng'));
+  const startRowIdx = firstRowIsHeader ? 1 : 0;
 
   const submissions = [];
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = startRowIdx; i < rows.length; i++) {
     const r = rows[i];
     if (!r || r.length === 0) continue;
 
-    const rawTimestamp = r[timestampIdx] ? String(r[timestampIdx]).trim() : '';
-    const rawName = r[nameIdx] ? String(r[nameIdx]).trim() : '';
-    const rawPhone = r[phoneIdx] ? String(r[phoneIdx]).trim() : '';
+    const rawTimestamp = timestampIdx !== -1 && r[timestampIdx] ? String(r[timestampIdx]).trim() : '';
+    const rawPhone = phoneIdx !== -1 && r[phoneIdx] ? String(r[phoneIdx]).trim() : '';
     
     // Fallback: Ưu tiên lấy Link chuẩn (nếu có dữ liệu), không thì lấy Link gốc
     const valCanonical = canonicalLinkIdx !== -1 && r[canonicalLinkIdx] ? String(r[canonicalLinkIdx]).trim() : '';
-    const valOriginal = r[linkIdx] ? String(r[linkIdx]).trim() : '';
+    const valOriginal = linkIdx !== -1 && r[linkIdx] ? String(r[linkIdx]).trim() : '';
     const rawLink = valCanonical || valOriginal || '';
 
-    if (rawLink || rawPhone || rawName) {
+    // Bỏ qua dòng trống hoặc dòng header lặp lại
+    if (rawLink.toLowerCase().includes('link') && rawPhone.toLowerCase().includes('sđt')) continue;
+
+    if (rawLink || rawPhone) {
       submissions.push({
-        timestamp: rawTimestamp,
-        rawName,
+        timestamp: rawTimestamp || new Date().toISOString(),
+        rawName: '', // Không có trường tên, để trống
         rawPhone,
         rawLink,
         rowIndex: i + 1
