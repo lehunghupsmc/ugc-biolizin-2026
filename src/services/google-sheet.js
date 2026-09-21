@@ -132,15 +132,36 @@ async function ensureInternalTabsExist(sheets, spreadsheetId) {
   }
 }
 
+function isDisqualifiedStatus(statusStr) {
+  if (!statusStr) return false;
+  const s = String(statusStr).toLowerCase().trim();
+  return (
+    s.includes('sai thể lệ') ||
+    s.includes('sai the le') ||
+    s.includes('không hợp lệ') ||
+    s.includes('khong hop le') ||
+    s.includes('loại') ||
+    s.includes('loai') ||
+    s.includes('hủy') ||
+    s.includes('huy') ||
+    s.includes('vi phạm') ||
+    s.includes('vi pham') ||
+    s.includes('disqualif') ||
+    s.includes('reject') ||
+    s.includes('invalid') ||
+    s.includes('spam')
+  );
+}
+
 /**
- * Đọc dữ liệu từ Sheet Nguồn (mặc định tab 'gop_du_lieu' range M:P).
+ * Đọc dữ liệu từ Sheet Nguồn (mặc định tab 'gop_du_lieu' range M:Q).
  */
 async function readSourceFormSubmissions(sheets, spreadsheetId) {
   const meta = await getSheetMeta(sheets, spreadsheetId);
   const existingTabs = Object.keys(meta);
   
   const targetTabName = config.SOURCE_TAB_NAME || 'gop_du_lieu';
-  const targetRange = config.SOURCE_RANGE || 'M:P';
+  const targetRange = config.SOURCE_RANGE || 'M:Q';
 
   // 1. Ưu tiên tìm tab 'gop_du_lieu' (không phân biệt hoa thường)
   let formTab = existingTabs.find(t => t.trim().toLowerCase() === targetTabName.toLowerCase());
@@ -167,31 +188,51 @@ async function readSourceFormSubmissions(sheets, spreadsheetId) {
   let phoneIdx = headers.findIndex(h => h.includes('sđt') || h.includes('số điện thoại') || h.includes('điện thoại') || h.includes('phone') || h.includes('so_dien_thoai'));
   let canonicalLinkIdx = headers.findIndex(h => h.includes('link chuẩn') || h.includes('link bung') || h.includes('link thật'));
   let linkIdx = headers.findIndex(h => h.includes('link_bai_thi') || h.includes('bài thi') || h.includes('dự thi') || h.includes('link') || h.includes('video') || h.includes('liên kết') || h.includes('url') || h.includes('gốc'));
+  let statusIdx = headers.findIndex(h => 
+    h.includes('thể lệ') || 
+    h.includes('trạng thái') || 
+    h.includes('duyệt') || 
+    h.includes('tình trạng') || 
+    h.includes('ghi chú') || 
+    h.includes('status') || 
+    h.includes('note')
+  );
 
   // Heuristic Fallback: Quét các dòng dữ liệu mẫu để tự nhận diện cột nếu header không khớp
-  if (phoneIdx === -1 || linkIdx === -1) {
-    const numCols = rows[0] ? rows[0].length : 4;
-    for (let col = 0; col < numCols; col++) {
-      for (let rIdx = 0; rIdx < Math.min(rows.length, 10); rIdx++) {
-        const cell = String(rows[rIdx]?.[col] || '').trim();
-        if (!cell) continue;
+  const numCols = rows[0] ? rows[0].length : 5;
+  for (let col = 0; col < numCols; col++) {
+    for (let rIdx = 0; rIdx < Math.min(rows.length, 20); rIdx++) {
+      const cell = String(rows[rIdx]?.[col] || '').trim();
+      if (!cell) continue;
 
-        // Nhận diện link video
-        if (linkIdx === -1 && (cell.includes('tiktok.com') || cell.includes('facebook.com') || cell.includes('fb.watch') || cell.startsWith('http://') || cell.startsWith('https://'))) {
-          linkIdx = col;
-        }
-
-        // Nhận diện số điện thoại (9-11 số)
-        const cleanPhone = cell.replace(/[\s.-]/g, '');
-        if (phoneIdx === -1 && /(^(0|\+?84)[3|5|7|8|9][0-9]{8}$)/.test(cleanPhone)) {
-          phoneIdx = col;
-        }
-
-        // Nhận diện thời gian
-        if (timestampIdx === -1 && (/\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(cell) || /\d{1,2}[-/]\d{1,2}[-/]\d{4}/.test(cell))) {
-          timestampIdx = col;
-        }
+      // Nhận diện link video
+      if (linkIdx === -1 && (cell.includes('tiktok.com') || cell.includes('facebook.com') || cell.includes('fb.watch') || cell.startsWith('http://') || cell.startsWith('https://'))) {
+        linkIdx = col;
       }
+
+      // Nhận diện số điện thoại (9-11 số)
+      const cleanPhone = cell.replace(/[\s.-]/g, '');
+      if (phoneIdx === -1 && /(^(0|\+?84)[3|5|7|8|9][0-9]{8}$)/.test(cleanPhone)) {
+        phoneIdx = col;
+      }
+
+      // Nhận diện thời gian
+      if (timestampIdx === -1 && (/\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(cell) || /\d{1,2}[-/]\d{1,2}[-/]\d{4}/.test(cell))) {
+        timestampIdx = col;
+      }
+
+      // Nhận diện cột trạng thái nếu có giá trị 'sai thể lệ', 'loại', 'vi phạm'
+      if (statusIdx === -1 && isDisqualifiedStatus(cell)) {
+        statusIdx = col;
+      }
+    }
+  }
+
+  // Nếu vẫn chưa xác định được statusIdx nhưng range có cột thứ 5 (ví dụ cột Q khi đọc M:Q)
+  if (statusIdx === -1 && numCols >= 5) {
+    const candidateIdx = 4;
+    if (candidateIdx !== phoneIdx && candidateIdx !== linkIdx && candidateIdx !== canonicalLinkIdx && candidateIdx !== timestampIdx) {
+      statusIdx = candidateIdx;
     }
   }
 
@@ -199,7 +240,7 @@ async function readSourceFormSubmissions(sheets, spreadsheetId) {
   if (linkIdx === -1) linkIdx = rows[0] && rows[0].length > 1 ? rows[0].length - 1 : 1;
 
   // Kiểm tra dòng đầu có phải header không
-  const firstRowIsHeader = headers.some(h => h.includes('link') || h.includes('sđt') || h.includes('phone') || h.includes('stt') || h.includes('nền tảng'));
+  const firstRowIsHeader = headers.some(h => h.includes('link') || h.includes('sđt') || h.includes('phone') || h.includes('stt') || h.includes('nền tảng') || h.includes('thể lệ') || h.includes('trạng thái'));
   const startRowIdx = firstRowIsHeader ? 1 : 0;
 
   const submissions = [];
@@ -215,6 +256,10 @@ async function readSourceFormSubmissions(sheets, spreadsheetId) {
     const valOriginal = linkIdx !== -1 && r[linkIdx] ? String(r[linkIdx]).trim() : '';
     const rawLink = valCanonical || valOriginal || '';
 
+    // Lấy trạng thái duyệt (nếu có)
+    const rawStatus = statusIdx !== -1 && r[statusIdx] ? String(r[statusIdx]).trim() : '';
+    const isDisqualified = isDisqualifiedStatus(rawStatus);
+
     // Bỏ qua dòng trống hoặc dòng header lặp lại
     if (rawLink.toLowerCase().includes('link') && rawPhone.toLowerCase().includes('sđt')) continue;
 
@@ -224,6 +269,8 @@ async function readSourceFormSubmissions(sheets, spreadsheetId) {
         rawName: '', // Không có trường tên, để trống
         rawPhone,
         rawLink,
+        rawStatus,
+        isDisqualified,
         rowIndex: i + 1
       });
     }

@@ -90,6 +90,37 @@ test('deduplicate: processSubmissionsAndDeduplicate', async (t) => {
     assert.strictEqual(warnings.length, 0);
   });
 
+  await t.test('Bài thi bị đánh dấu Sai thể lệ / isDisqualified -> Bị loại và thêm vào warnings', async () => {
+    const mockSubmissions = [
+      {
+        timestamp: '20/08/2026 10:00:00',
+        rawName: 'Nguyen Van A',
+        rawPhone: '0912345678',
+        rawLink: 'https://www.tiktok.com/@user/video/1111111111111111111',
+        rawStatus: 'Sai thể lệ',
+        isDisqualified: true,
+        rowIndex: 2
+      },
+      {
+        timestamp: '20/08/2026 11:00:00',
+        rawName: 'Tran Thi B',
+        rawPhone: '0987654321',
+        rawLink: 'https://www.tiktok.com/@user/video/2222222222222222222',
+        rawStatus: '',
+        isDisqualified: false,
+        rowIndex: 3
+      }
+    ];
+
+    const { validVideos, warnings } = await processSubmissionsAndDeduplicate(mockSubmissions);
+
+    assert.strictEqual(validVideos.length, 1);
+    assert.strictEqual(validVideos[0].phone, '0987654321');
+    assert.strictEqual(warnings.length, 1);
+    assert.strictEqual(warnings[0].type, 'DISQUALIFIED_BY_ADMIN');
+    assert.ok(warnings[0].message.includes('Sai thể lệ'));
+  });
+
   // Restore config
   config.SUBMISSION_START_AT = origStart;
   config.SUBMISSION_END_AT = origEnd;

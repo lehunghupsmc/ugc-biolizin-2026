@@ -87,6 +87,19 @@ async function processSubmissionsAndDeduplicate(submissions) {
       continue;
     }
 
+    if (sub.isDisqualified) {
+      warnings.push({
+        type: 'DISQUALIFIED_BY_ADMIN',
+        composite_key: 'N/A',
+        user_name: sub.rawName,
+        phone_masked: maskPhoneNumber(normPhone),
+        link_raw: sub.rawLink,
+        message: `Bị loại bởi Ban tổ chức (Cột Q: "${sub.rawStatus}") ở dòng ${sub.rowIndex}`,
+        detected_at: nowIso
+      });
+      continue;
+    }
+
     if (sub.resolveError) {
       warnings.push({
         type: 'SSRF_BLOCKED',
