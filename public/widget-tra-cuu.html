@@ -1,0 +1,472 @@
+<!-- =======================================================
+  WIDGET TRA CỨU TRẠNG THÁI VIDEO THEO SỐ ĐIỆN THOẠI
+  Dành cho Landing Page Biolizin Creator Challenge
+  Hướng dẫn: Copy toàn bộ đoạn mã này dán vào 1 phần tử HTML trên LadiPage
+======================================================== -->
+
+<div id="biolizin-lookup-root">
+  <div class="blz-lookup-card">
+    <div class="blz-header">
+      <h3 class="blz-title">🔍 TRA CỨU TRẠNG THÁI BÀI DỰ THI</h3>
+      <p class="blz-subtitle">Nhập số điện thoại đăng ký dự thi để kiểm tra tình trạng duyệt video từ Ban tổ chức</p>
+    </div>
+
+    <!-- Khung nhập SĐT -->
+    <div class="blz-search-box">
+      <input 
+        type="tel" 
+        id="blz-phone-input" 
+        class="blz-input" 
+        placeholder="Nhập số điện thoại (ví dụ: 0912345678)" 
+        maxlength="11" 
+        autocomplete="tel"
+      />
+      <button id="blz-search-btn" class="blz-btn" type="button">
+        <span class="blz-btn-text">Tra Cứu Ngay</span>
+        <span class="blz-spinner" style="display: none;"></span>
+      </button>
+    </div>
+
+    <!-- Thông báo lỗi / trạng thái -->
+    <div id="blz-alert" class="blz-alert" style="display: none;"></div>
+
+    <!-- Khu vực hiển thị danh sách video kết quả -->
+    <div id="blz-result-area" class="blz-result-area" style="display: none;">
+      <div class="blz-result-header">
+        <span id="blz-result-count" class="blz-result-count"></span>
+      </div>
+      <div id="blz-video-list" class="blz-video-list"></div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* CSS ISOLATED SCOPE CHO WIDGET BIOLIZIN */
+#biolizin-lookup-root {
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  box-sizing: border-box;
+  color: #333333;
+}
+
+#biolizin-lookup-root * {
+  box-sizing: border-box;
+}
+
+#biolizin-lookup-root .blz-lookup-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 28px 24px;
+  box-shadow: 0 10px 30px rgba(94, 53, 146, 0.1);
+  border: 2px solid #ede7f6;
+}
+
+#biolizin-lookup-root .blz-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+#biolizin-lookup-root .blz-title {
+  color: #5e3592;
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0 0 8px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+#biolizin-lookup-root .blz-subtitle {
+  color: #666666;
+  font-size: 14px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+#biolizin-lookup-root .blz-search-box {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+#biolizin-lookup-root .blz-input {
+  flex: 1;
+  height: 48px;
+  padding: 0 16px;
+  border: 2px solid #d1c4e9;
+  border-radius: 10px;
+  font-size: 16px;
+  outline: none;
+  transition: border-color 0.2s;
+  color: #333;
+}
+
+#biolizin-lookup-root .blz-input:focus {
+  border-color: #5e3592;
+  box-shadow: 0 0 0 3px rgba(94, 53, 146, 0.15);
+}
+
+#biolizin-lookup-root .blz-btn {
+  height: 48px;
+  padding: 0 24px;
+  background: linear-space, #5e3592;
+  background: linear-gradient(135deg, #7b1fa2 0%, #5e3592 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 140px;
+  transition: transform 0.1s, opacity 0.2s;
+}
+
+#biolizin-lookup-root .blz-btn:hover {
+  opacity: 0.95;
+  transform: translateY(-1px);
+}
+
+#biolizin-lookup-root .blz-btn:active {
+  transform: translateY(0);
+}
+
+#biolizin-lookup-root .blz-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+#biolizin-lookup-root .blz-spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: blz-spin 0.8s linear infinite;
+}
+
+@keyframes blz-spin {
+  to { transform: rotate(360deg); }
+}
+
+#biolizin-lookup-root .blz-alert {
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.4;
+  margin-bottom: 20px;
+}
+
+#biolizin-lookup-root .blz-alert-info {
+  background: #f3e5f5;
+  color: #5e3592;
+  border: 1px solid #d1c4e9;
+}
+
+#biolizin-lookup-root .blz-alert-warning {
+  background: #fff8e1;
+  color: #b78103;
+  border: 1px solid #ffe082;
+}
+
+#biolizin-lookup-root .blz-alert-error {
+  background: #ffebee;
+  color: #c62828;
+  border: 1px solid #ffcdd2;
+}
+
+#biolizin-lookup-root .blz-result-header {
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px dashed #e0e0e0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #5e3592;
+}
+
+#biolizin-lookup-root .blz-video-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+#biolizin-lookup-root .blz-video-item {
+  background: #faf8fc;
+  border: 1px solid #ede7f6;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: all 0.2s;
+}
+
+#biolizin-lookup-root .blz-video-item:hover {
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(94, 53, 146, 0.08);
+}
+
+#biolizin-lookup-root .blz-video-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#biolizin-lookup-root .blz-video-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #333333;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#biolizin-lookup-root .blz-platform-tag {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #ede7f6;
+  color: #5e3592;
+}
+
+/* BADGES TRẠNG THÁI */
+#biolizin-lookup-root .blz-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* 1. ĐÃ DUYỆT (XANH LÁ) */
+#biolizin-lookup-root .badge-approved {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #c8e6c9;
+}
+
+/* 2. VI PHẠM THỂ LỆ (ĐỎ) */
+#biolizin-lookup-root .badge-rejected {
+  background: #ffebee;
+  color: #c62828;
+  border: 1px solid #ffcdd2;
+}
+
+/* 3. ĐANG DUYỆT (VÀNG CAM) */
+#biolizin-lookup-root .badge-pending {
+  background: #fff8e1;
+  color: #f57f17;
+  border: 1px solid #ffe082;
+}
+
+#biolizin-lookup-root .blz-video-meta {
+  font-size: 13px;
+  color: #777777;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#biolizin-lookup-root .blz-note-box {
+  background: #ffffff;
+  border: 1px dashed #d1c4e9;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #444444;
+  margin-top: 4px;
+}
+
+#biolizin-lookup-root .blz-note-box strong {
+  color: #5e3592;
+}
+
+#biolizin-lookup-root .blz-note-rejected {
+  background: #fffafa;
+  border-color: #ffcdd2;
+  color: #c62828;
+}
+
+#biolizin-lookup-root .blz-view-btn {
+  align-self: flex-start;
+  font-size: 13px;
+  font-weight: 600;
+  color: #5e3592;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+#biolizin-lookup-root .blz-view-btn:hover {
+  text-decoration: underline;
+}
+
+/* Responsive Mobile */
+@media (max-width: 480px) {
+  #biolizin-lookup-root .blz-lookup-card {
+    padding: 20px 16px;
+  }
+  #biolizin-lookup-root .blz-search-box {
+    flex-direction: column;
+  }
+  #biolizin-lookup-root .blz-btn {
+    width: 100%;
+  }
+  #biolizin-lookup-root .blz-video-top {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+</style>
+
+<script>
+(function() {
+  // CẤU HÌNH ĐƯỜNG DẪN API VERCEL CỦA BẠN:
+  // Thay domain Vercel thực tế của bạn tại đây sau khi deploy:
+  var API_BASE_URL = "https://ugc-biolizin-2026.vercel.app/api/lookup";
+
+  var phoneInput = document.getElementById("blz-phone-input");
+  var searchBtn = document.getElementById("blz-search-btn");
+  var btnText = searchBtn.querySelector(".blz-btn-text");
+  var spinner = searchBtn.querySelector(".blz-spinner");
+  var alertBox = document.getElementById("blz-alert");
+  var resultArea = document.getElementById("blz-result-area");
+  var resultCount = document.getElementById("blz-result-count");
+  var videoList = document.getElementById("blz-video-list");
+
+  function showAlert(message, type) {
+    alertBox.textContent = message;
+    alertBox.className = "blz-alert blz-alert-" + (type || "info");
+    alertBox.style.display = "block";
+  }
+
+  function hideAlert() {
+    alertBox.style.display = "none";
+  }
+
+  function setLoading(loading) {
+    if (loading) {
+      searchBtn.disabled = true;
+      btnText.style.display = "none";
+      spinner.style.display = "inline-block";
+      hideAlert();
+      resultArea.style.display = "none";
+    } else {
+      searchBtn.disabled = false;
+      btnText.style.display = "inline-block";
+      spinner.style.display = "none";
+    }
+  }
+
+  function renderVideos(data) {
+    resultCount.textContent = "🏆 Thí sinh " + data.phoneMasked + " - Tìm thấy " + data.total + " video đã nộp:";
+    videoList.innerHTML = "";
+
+    data.videos.forEach(function(vid) {
+      var item = document.createElement("div");
+      item.className = "blz-video-item";
+
+      var icon = vid.status === "APPROVED" ? "🟢" : vid.status === "REJECTED" ? "🔴" : "🟡";
+
+      var noteHtml = "";
+      if (vid.status === "REJECTED") {
+        noteHtml = '<div class="blz-note-box blz-note-rejected"><strong>Ghi chú từ BTC:</strong> ' + (vid.note || "Vi phạm thể lệ cuộc thi") + '</div>';
+      } else if (vid.status === "APPROVED") {
+        noteHtml = '<div class="blz-note-box"><strong>Trạng thái:</strong> Video đã đạt chuẩn và đang tính điểm trên BXH.</div>';
+      } else {
+        noteHtml = '<div class="blz-note-box"><strong>Trạng thái:</strong> Ban tổ chức đang tiến hành kiểm tra video.</div>';
+      }
+
+      var linkHtml = "";
+      if (vid.link && (vid.link.indexOf("http") === 0)) {
+        linkHtml = '<a href="' + vid.link + '" target="_blank" rel="noopener noreferrer" class="blz-view-btn">Xem link bài thi ↗</a>';
+      }
+
+      item.innerHTML = 
+        '<div class="blz-video-top">' +
+          '<div class="blz-video-title">' +
+            '<span>#' + vid.stt + '</span>' +
+            '<span class="blz-platform-tag">' + (vid.platform || 'Video') + '</span>' +
+          '</div>' +
+          '<span class="blz-badge ' + vid.badgeClass + '">' +
+            icon + ' ' + vid.statusText +
+          '</span>' +
+        '</div>' +
+        '<div class="blz-video-meta">' +
+          '<span>Thời gian nộp: <strong>' + vid.submittedAt + '</strong></span>' +
+          noteHtml +
+          linkHtml +
+        '</div>';
+
+      videoList.appendChild(item);
+    });
+
+    resultArea.style.display = "block";
+  }
+
+  function handleSearch() {
+    var rawPhone = (phoneInput.value || "").trim();
+    if (!rawPhone) {
+      showAlert("Vui lòng nhập số điện thoại dự thi.", "warning");
+      phoneInput.focus();
+      return;
+    }
+
+    var cleanPhone = rawPhone.replace(/[\s.-]/g, "");
+    if (!/^(0|\+?84)[0-9]{8,10}$/.test(cleanPhone)) {
+      showAlert("Số điện thoại không đúng định dạng. Vui lòng kiểm tra lại.", "warning");
+      phoneInput.focus();
+      return;
+    }
+
+    setLoading(true);
+
+    var targetUrl = API_BASE_URL + "?phone=" + encodeURIComponent(cleanPhone) + "&t=" + Date.now();
+
+    fetch(targetUrl, {
+      method: "GET",
+      headers: { "Accept": "application/json" }
+    })
+    .then(function(res) {
+      return res.json();
+    })
+    .then(function(res) {
+      setLoading(false);
+      if (!res.success) {
+        showAlert(res.error || "Không thể tải dữ liệu.", "error");
+        return;
+      }
+
+      if (!res.videos || res.videos.length === 0) {
+        showAlert("Chưa tìm thấy bài thi nào cho số điện thoại " + (res.phoneMasked || cleanPhone) + ". Vui lòng kiểm tra lại hoặc gửi bài thi tại Form đăng ký.", "warning");
+        return;
+      }
+
+      renderVideos(res);
+    })
+    .catch(function(err) {
+      setLoading(false);
+      console.error("Lookup Error:", err);
+      showAlert("Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.", "error");
+    });
+  }
+
+  searchBtn.addEventListener("click", handleSearch);
+  phoneInput.addEventListener("keydown", function(e) {
+    if (e.key === "Enter") {
+      handleSearch();
+    }
+  });
+})();
+</script>
