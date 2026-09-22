@@ -87,10 +87,10 @@ function classifyStatus(colQVal) {
     s.includes('da duyet') ||
     s.includes('hợp lệ') ||
     s.includes('hop le') ||
-    s.includes('đạt') ||
-    s.includes('dat') ||
-    s.includes('ok') ||
-    s.includes('pass') ||
+    /(?:^|\b|\s)đạt(?:\b|\s|$)/.test(s) ||
+    /(?:^|\b|\s)dat(?:\b|\s|$)/.test(s) ||
+    /(?:^|\b|\s)ok(?:\b|\s|$)/.test(s) ||
+    /(?:^|\b|\s)pass(?:\b|\s|$)/.test(s) ||
     s.includes('approved') ||
     /(?:^|\s)duyệt(?:\s|$)/.test(s) ||
     /(?:^|\s)duyet(?:\s|$)/.test(s)
@@ -122,15 +122,55 @@ async function getSheetRows() {
 
   const sheets = googleSheet.getSheetsClient();
   const sourceSheetId = config.GOOGLE_SOURCE_SHEET_ID;
-  const tabName = config.SOURCE_TAB_NAME || 'gop_du_lieu';
-  const rangeQuery = `${tabName}!M:Q`;
 
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: sourceSheetId,
-    range: rangeQuery
-  });
+  // Lấy metadata để chọn đúng tab (ưu tiên tab 'gop_du_lieu', nếu không có thì lấy tab đầu tiên)
+  let targetTab = config.SOURCE_TAB_NAME || 'gop_du_lieu';
+  try {
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: sourceSheetId });
+    const sheetTitles = (meta.data.sheets || []).map(s => s.properties.title);
+    if (sheetTitles.length > 0) {
+      const found = sheetTitles.find(t => t.trim().toLowerCase() === targetTab.toLowerCase());
+      if (found) {
+        targetTab = found;
+      } else {
+        const partial = sheetTitles.find(t => t.toLowerCase().includes('gop') || t.toLowerCase().includes('du_lieu'));
+        targetTab = partial || sheetTitles[0];
+      }
+    }
+  } catch (err) {
+    console.warn('[API Lookup] Cannot fetch sheet metadata, using default tab:', targetTab, err.message);
+  }
 
-  const rows = res.data.values || [];
+  // Thử đọc range M:Q (chuẩn gộp dữ liệu), nếu rỗng hoặc lỗi thì fallback sang A:Z
+  let rows = [];
+  const primaryRange = `'${targetTab}'!${config.SOURCE_RANGE || 'M:Q'}`;
+  try {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: sourceSheetId,
+      range: primaryRange
+    });
+    rows = res.data.values || [];
+  } catch (err) {
+    console.warn(`[API Lookup] Failed to read ${primaryRange}, trying A:Z fallback:`, err.message);
+  }
+
+  if (rows.length <= 1) {
+    // Nếu range M:Q không có dữ liệu, thử đọc từ cột A đến Z
+    try {
+      const fallbackRange = `'${targetTab}'!A:Z`;
+      const res = await sheets.spreadsheets.values.get({
+        spreadsheetId: sourceSheetId,
+        range: fallbackRange
+      });
+      const fallbackRows = res.data.values || [];
+      if (fallbackRows.length > rows.length) {
+        rows = fallbackRows;
+      }
+    } catch (err) {
+      console.warn('[API Lookup] Fallback range A:Z failed:', err.message);
+    }
+  }
+
   cachedData = rows;
   lastCacheTime = now;
   return rows;
@@ -196,18 +236,16 @@ module.exports = async function handler(req, res) {
     const headerRow = rows[0] || [];
     const headers = headerRow.map(h => String(h).toLowerCase().trim());
 
-    let timestampIdx = headers.findIndex(h => h.includes('thời gian') || h.includes('time') || h.includes('ngày'));
-    let phoneIdx = headers.findIndex(h => h.includes('sđt') || h.includes('điện thoại') || h.includes('phone'));
+    let timestampIdx = headers.findIndex(h => h.includes('thời gian') || h.includes('time') || h.includes('ngày') || h.includes('timestamp'));
+    let phoneIdx = headers.findIndex(h => h.includes('sđt') || h.includes('điện thoại') || h.includes('phone') || h.includes('số điện thoại'));
     let platformIdx = headers.findIndex(h => h.includes('nền tảng') || h.includes('platform'));
-    let linkIdx = headers.findIndex(h => h.includes('link') || h.includes('bài thi') || h.includes('video'));
-    let statusIdx = headers.findIndex(h => h.includes('thể lệ') || h.includes('trạng thái') || h.includes('duyệt') || h.includes('ghi chú'));
+    let linkIdx = headers.findIndex(h => h.includes('link') || h.includes('bài thi') || h.includes('video') || h.includes('url'));
+    let statusIdx = headers.findIndex(h => h.includes('thể lệ') || h.includes('trạng thái') || h.includes('duyệt') || h.includes('ghi chú') || h.includes('status') || h.includes('note'));
 
-    // Gán mặc định theo thứ tự range M:Q nếu không có header khớp
-    if (timestampIdx === -1) timestampIdx = 0; // Cột M
-    if (phoneIdx === -1) phoneIdx = 1;         // Cột N
-    if (platformIdx === -1) platformIdx = 2;   // Cột O
-    if (linkIdx === -1) linkIdx = 3;           // Cột P
-    if (statusIdx === -1) statusIdx = 4;       // Cột Q
+    // Gán mặc định nếu không có header khớp
+    if (timestampIdx === -1) timestampIdx = 0;
+    if (phoneIdx === -1) phoneIdx = 1;
+    if (linkIdx === -1) linkIdx = 3;
 
     const matchedVideos = [];
 
@@ -220,19 +258,34 @@ module.exports = async function handler(req, res) {
 
       if (rowNormPhone === normPhone) {
         const rawTime = r[timestampIdx] !== undefined ? String(r[timestampIdx]).trim() : '';
-        const rawPlatform = r[platformIdx] !== undefined ? String(r[platformIdx]).trim() : '';
         let cleanLink = r[linkIdx] !== undefined ? String(r[linkIdx]).trim() : '';
         if (cleanLink && !/^https?:\/\//i.test(cleanLink)) {
           cleanLink = 'https://' + cleanLink;
         }
-        const rawStatus = r[statusIdx] !== undefined ? String(r[statusIdx]).trim() : '';
 
+        // Tự động nhận diện Platform nếu cột không tồn tại hoặc dữ liệu trùng số điện thoại
+        let platformName = '';
+        if (platformIdx !== -1 && r[platformIdx] !== undefined) {
+          platformName = String(r[platformIdx]).trim();
+        }
+        if (!platformName || platformName === rowRawPhone) {
+          if (cleanLink.includes('tiktok.com')) {
+            platformName = 'TikTok';
+          } else if (cleanLink.includes('facebook.com') || cleanLink.includes('fb.watch')) {
+            platformName = 'Facebook';
+          } else {
+            platformName = 'Video';
+          }
+        }
+
+        // Trạng thái kiểm duyệt (chỉ lấy nếu có cột status xác định)
+        const rawStatus = (statusIdx !== -1 && r[statusIdx] !== undefined) ? String(r[statusIdx]).trim() : '';
         const classification = classifyStatus(rawStatus);
 
         matchedVideos.push({
           stt: matchedVideos.length + 1,
           submittedAt: rawTime || 'N/A',
-          platform: rawPlatform || 'Video',
+          platform: platformName,
           link: cleanLink,
           status: classification.status,
           statusText: classification.statusText,
