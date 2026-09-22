@@ -5,3 +5,6 @@ node_modules/
 ugc-biolizin-key.json
 credentials/
 data/
+
+.vercel
+.env*
