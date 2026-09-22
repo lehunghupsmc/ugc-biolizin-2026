@@ -41,18 +41,26 @@
 </div>
 
 <style>
+/* NHÚNG GOOGLE FONT NUNITO (HỖ TRỢ TIẾNG VIỆT 100%) */
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap');
+
 /* CSS ISOLATED SCOPE CHO WIDGET BIOLIZIN */
 #biolizin-lookup-root {
   width: 100%;
   max-width: 680px;
   margin: 0 auto;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Nunito', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   box-sizing: border-box;
   color: #333333;
 }
 
 #biolizin-lookup-root * {
   box-sizing: border-box;
+}
+
+#biolizin-lookup-root input,
+#biolizin-lookup-root button {
+  font-family: 'Nunito', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 #biolizin-lookup-root .blz-lookup-card {
@@ -70,7 +78,8 @@
 
 #biolizin-lookup-root .blz-title {
   color: #5e3592;
-  font-size: 20px;
+  font-family: 'SVN-Merge', 'SVG-Merge', 'Nunito', sans-serif;
+  font-size: 22px;
   font-weight: 800;
   margin: 0 0 8px 0;
   text-transform: uppercase;
