@@ -24,58 +24,93 @@ function classifyStatus(colQVal) {
     };
   }
 
-  const s = String(colQVal).toLowerCase().trim();
+  const raw = String(colQVal).trim();
+  const s = raw.toLowerCase();
 
-  // 1. Kiểm tra Vi phạm / Sai thể lệ
+  // 1. Kiểm tra Vi phạm / Sai thể lệ / Từ chối / Không duyệt (Ưu tiên cao nhất)
   if (
     s.includes('vi phạm') ||
     s.includes('vi pham') ||
     s.includes('sai thể lệ') ||
     s.includes('sai the le') ||
+    s.includes('không hợp lệ') ||
+    s.includes('khong hop le') ||
+    s.includes('không duyệt') ||
+    s.includes('khong duyet') ||
+    s.includes('từ chối') ||
+    s.includes('tu choi') ||
     s.includes('loại') ||
     s.includes('loai') ||
     s.includes('hủy') ||
     s.includes('huy') ||
-    s.includes('không hợp lệ') ||
-    s.includes('khong hop le') ||
     s.includes('reject') ||
-    s.includes('invalid')
+    s.includes('invalid') ||
+    s.includes('disqualified')
   ) {
     return {
       status: 'REJECTED',
       statusText: 'Vi phạm thể lệ',
       badgeClass: 'badge-rejected',
       badgeColor: '#f56c6c', // Màu đỏ
-      note: String(colQVal).trim()
+      note: raw
     };
   }
 
-  // 2. Kiểm tra Duyệt / Hợp lệ
+  // 2. Kiểm tra Đang duyệt / Chờ duyệt / Chưa duyệt / Cần kiểm tra lại (Ưu tiên trước nhóm Duyệt)
   if (
-    s.includes('duyệt') ||
-    s.includes('duyet') ||
+    s.includes('đang duyệt') ||
+    s.includes('dang duyet') ||
+    s.includes('chờ duyệt') ||
+    s.includes('cho duyet') ||
+    s.includes('chưa duyệt') ||
+    s.includes('chua duyet') ||
+    s.includes('cần duyệt lại') ||
+    s.includes('can duyet lai') ||
+    s.includes('đang kiểm tra') ||
+    s.includes('dang kiem tra') ||
+    s.includes('chờ kiểm tra') ||
+    s.includes('cho kiem tra') ||
+    s.includes('pending')
+  ) {
+    return {
+      status: 'PENDING',
+      statusText: 'Đang duyệt',
+      badgeClass: 'badge-pending',
+      badgeColor: '#e6a23c', // Màu vàng cam
+      note: raw || 'Ban tổ chức đang kiểm tra'
+    };
+  }
+
+  // 3. Kiểm tra Duyệt / Hợp lệ / Đạt (Sau khi đã loại trừ các trường hợp phủ định/chờ ở trên)
+  if (
+    s.includes('đã duyệt') ||
+    s.includes('da duyet') ||
     s.includes('hợp lệ') ||
     s.includes('hop le') ||
     s.includes('đạt') ||
+    s.includes('dat') ||
     s.includes('ok') ||
-    s.includes('pass')
+    s.includes('pass') ||
+    s.includes('approved') ||
+    /(?:^|\s)duyệt(?:\s|$)/.test(s) ||
+    /(?:^|\s)duyet(?:\s|$)/.test(s)
   ) {
     return {
       status: 'APPROVED',
       statusText: 'Đã duyệt',
       badgeClass: 'badge-approved',
       badgeColor: '#28a745', // Màu xanh lá
-      note: String(colQVal).trim() || 'Hợp lệ'
+      note: raw || 'Hợp lệ'
     };
   }
 
-  // 3. Mặc định còn lại: Tự động ghi là "Đang duyệt"
+  // 4. Mặc định còn lại: Tự động ghi là "Đang duyệt" kèm ghi chú gốc
   return {
     status: 'PENDING',
     statusText: 'Đang duyệt',
     badgeClass: 'badge-pending',
     badgeColor: '#e6a23c',
-    note: String(colQVal).trim() || 'Ban tổ chức đang kiểm tra'
+    note: raw || 'Ban tổ chức đang kiểm tra'
   };
 }
 
@@ -109,7 +144,8 @@ module.exports = async function handler(req, res) {
     'Access-Control-Allow-Headers',
     'X-Requested-With, Accept, Content-Type, Cache-Control'
   );
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  // Cho phép Edge Caching trên Vercel 30s để chống quá tải quota Google Sheets API
+  res.setHeader('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=60');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -185,7 +221,10 @@ module.exports = async function handler(req, res) {
       if (rowNormPhone === normPhone) {
         const rawTime = r[timestampIdx] !== undefined ? String(r[timestampIdx]).trim() : '';
         const rawPlatform = r[platformIdx] !== undefined ? String(r[platformIdx]).trim() : '';
-        const rawLink = r[linkIdx] !== undefined ? String(r[linkIdx]).trim() : '';
+        let cleanLink = r[linkIdx] !== undefined ? String(r[linkIdx]).trim() : '';
+        if (cleanLink && !/^https?:\/\//i.test(cleanLink)) {
+          cleanLink = 'https://' + cleanLink;
+        }
         const rawStatus = r[statusIdx] !== undefined ? String(r[statusIdx]).trim() : '';
 
         const classification = classifyStatus(rawStatus);
@@ -194,7 +233,7 @@ module.exports = async function handler(req, res) {
           stt: matchedVideos.length + 1,
           submittedAt: rawTime || 'N/A',
           platform: rawPlatform || 'Video',
-          link: rawLink,
+          link: cleanLink,
           status: classification.status,
           statusText: classification.statusText,
           badgeClass: classification.badgeClass,

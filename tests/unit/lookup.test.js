@@ -26,7 +26,7 @@ test('lookup: classifyStatus logic', async (t) => {
     assert.strictEqual(res3.status, 'APPROVED');
   });
 
-  await t.test('Có note Vi phạm / Sai thể lệ / Loại -> Xếp vào Vi phạm thể lệ', () => {
+  await t.test('Có note Vi phạm / Sai thể lệ / Loại / Không duyệt -> Xếp vào Vi phạm thể lệ', () => {
     const res1 = classifyStatus('Sai thể lệ: thiếu hashtag');
     assert.strictEqual(res1.status, 'REJECTED');
     assert.strictEqual(res1.statusText, 'Vi phạm thể lệ');
@@ -38,6 +38,30 @@ test('lookup: classifyStatus logic', async (t) => {
 
     const res3 = classifyStatus('Vi phạm bản quyền');
     assert.strictEqual(res3.status, 'REJECTED');
+
+    const res4 = classifyStatus('Không duyệt bài');
+    assert.strictEqual(res4.status, 'REJECTED');
+
+    const res5 = classifyStatus('Từ chối duyệt');
+    assert.strictEqual(res5.status, 'REJECTED');
+  });
+
+  await t.test('Các trạng thái Chờ duyệt / Đang duyệt / Chưa duyệt / Cần duyệt lại -> Xếp vào Đang duyệt (không bị nhầm sang Đã duyệt)', () => {
+    const res1 = classifyStatus('Đang duyệt');
+    assert.strictEqual(res1.status, 'PENDING');
+    assert.strictEqual(res1.statusText, 'Đang duyệt');
+
+    const res2 = classifyStatus('Chờ duyệt bài thi');
+    assert.strictEqual(res2.status, 'PENDING');
+
+    const res3 = classifyStatus('Chưa duyệt');
+    assert.strictEqual(res3.status, 'PENDING');
+
+    const res4 = classifyStatus('Cần duyệt lại');
+    assert.strictEqual(res4.status, 'PENDING');
+
+    const res5 = classifyStatus('Đang kiểm tra hashtag');
+    assert.strictEqual(res5.status, 'PENDING');
   });
 
   await t.test('Note khác chưa có từ khóa đặc biệt -> Tự động đưa về Đang duyệt', () => {

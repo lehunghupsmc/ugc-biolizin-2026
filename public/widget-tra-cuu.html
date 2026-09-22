@@ -191,6 +191,9 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 #biolizin-lookup-root .blz-video-item {
@@ -332,9 +335,11 @@
 
 <script>
 (function() {
-  // CẤU HÌNH ĐƯỜNG DẪN API VERCEL CỦA BẠN:
-  // Thay domain Vercel thực tế của bạn tại đây sau khi deploy:
-  var API_BASE_URL = "https://ugc-biolizin-2026.vercel.app/api/lookup";
+  // CẤU HÌNH ĐƯỜNG DẪN API VERCEL:
+  // Mặc định hoặc lấy từ thuộc tính data-api-url của phần tử #biolizin-lookup-root
+  var rootEl = document.getElementById("biolizin-lookup-root");
+  var customApiUrl = rootEl ? rootEl.getAttribute("data-api-url") : null;
+  var API_BASE_URL = customApiUrl || "https://ugc-biolizin-2026.vercel.app/api/lookup";
 
   var phoneInput = document.getElementById("blz-phone-input");
   var searchBtn = document.getElementById("blz-search-btn");
@@ -344,6 +349,17 @@
   var resultArea = document.getElementById("blz-result-area");
   var resultCount = document.getElementById("blz-result-count");
   var videoList = document.getElementById("blz-video-list");
+
+  // Hàm bảo vệ chống tấn công XSS (Sanitize HTML Entities)
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
 
   function showAlert(message, type) {
     alertBox.textContent = message;
@@ -370,10 +386,12 @@
   }
 
   function renderVideos(data) {
-    resultCount.textContent = "🏆 Thí sinh " + data.phoneMasked + " - Tìm thấy " + data.total + " video đã nộp:";
+    var safePhone = escapeHtml(data.phoneMasked || "");
+    var safeTotal = escapeHtml(data.total || 0);
+    resultCount.textContent = "🏆 Thí sinh " + safePhone + " - Tìm thấy " + safeTotal + " video đã nộp:";
     videoList.innerHTML = "";
 
-    data.videos.forEach(function(vid) {
+    (data.videos || []).forEach(function(vid) {
       var item = document.createElement("div");
       item.className = "blz-video-item";
 
@@ -381,7 +399,7 @@
 
       var noteHtml = "";
       if (vid.status === "REJECTED") {
-        noteHtml = '<div class="blz-note-box blz-note-rejected"><strong>Ghi chú từ BTC:</strong> ' + (vid.note || "Vi phạm thể lệ cuộc thi") + '</div>';
+        noteHtml = '<div class="blz-note-box blz-note-rejected"><strong>Ghi chú từ BTC:</strong> ' + escapeHtml(vid.note || "Vi phạm thể lệ cuộc thi") + '</div>';
       } else if (vid.status === "APPROVED") {
         noteHtml = '<div class="blz-note-box"><strong>Trạng thái:</strong> Video đã đạt chuẩn và đang tính điểm trên BXH.</div>';
       } else {
@@ -389,22 +407,39 @@
       }
 
       var linkHtml = "";
-      if (vid.link && (vid.link.indexOf("http") === 0)) {
-        linkHtml = '<a href="' + vid.link + '" target="_blank" rel="noopener noreferrer" class="blz-view-btn">Xem link bài thi ↗</a>';
+      if (vid.link) {
+        var rawUrl = String(vid.link).trim();
+        if (!/^https?:\/\//i.test(rawUrl)) {
+          rawUrl = "https://" + rawUrl;
+        }
+        try {
+          var parsed = new URL(rawUrl);
+          if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+            linkHtml = '<a href="' + escapeHtml(rawUrl) + '" target="_blank" rel="noopener noreferrer" class="blz-view-btn">Xem link bài thi ↗</a>';
+          }
+        } catch (e) {
+          // Bỏ qua nếu URL không hợp lệ
+        }
       }
+
+      var safeStt = escapeHtml(vid.stt);
+      var safePlatform = escapeHtml(vid.platform || "Video");
+      var safeBadgeClass = escapeHtml(vid.badgeClass || "badge-pending");
+      var safeStatusText = escapeHtml(vid.statusText || "Đang duyệt");
+      var safeSubmittedAt = escapeHtml(vid.submittedAt || "N/A");
 
       item.innerHTML = 
         '<div class="blz-video-top">' +
           '<div class="blz-video-title">' +
-            '<span>#' + vid.stt + '</span>' +
-            '<span class="blz-platform-tag">' + (vid.platform || 'Video') + '</span>' +
+            '<span>#' + safeStt + '</span>' +
+            '<span class="blz-platform-tag">' + safePlatform + '</span>' +
           '</div>' +
-          '<span class="blz-badge ' + vid.badgeClass + '">' +
-            icon + ' ' + vid.statusText +
+          '<span class="blz-badge ' + safeBadgeClass + '">' +
+            icon + ' ' + safeStatusText +
           '</span>' +
         '</div>' +
         '<div class="blz-video-meta">' +
-          '<span>Thời gian nộp: <strong>' + vid.submittedAt + '</strong></span>' +
+          '<span>Thời gian nộp: <strong>' + safeSubmittedAt + '</strong></span>' +
           noteHtml +
           linkHtml +
         '</div>';
@@ -424,6 +459,12 @@
     }
 
     var cleanPhone = rawPhone.replace(/[\s.-]/g, "");
+
+    // Tự động bù số 0 nếu người dùng nhập 9 số bắt đầu bằng đầu số di động VN
+    if (/^[35789][0-9]{8}$/.test(cleanPhone)) {
+      cleanPhone = "0" + cleanPhone;
+    }
+
     if (!/^(0|\+?84)[0-9]{8,10}$/.test(cleanPhone)) {
       showAlert("Số điện thoại không đúng định dạng. Vui lòng kiểm tra lại.", "warning");
       phoneInput.focus();

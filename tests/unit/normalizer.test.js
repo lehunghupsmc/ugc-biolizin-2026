@@ -16,7 +16,7 @@ test('normalizer: normalizePhoneNumber', async (t) => {
     assert.strictEqual(normalizePhoneNumber('0912.345.678'), '0912345678');
     assert.strictEqual(normalizePhoneNumber('0912-345-678'), '0912345678');
     assert.strictEqual(normalizePhoneNumber('(0912) 345 678'), '0912345678');
-    assert.strictEqual(normalizePhoneNumber(912345678), null); // Số 9 chữ số thiếu 0
+    assert.strictEqual(normalizePhoneNumber(912345678), '0912345678'); // Tự động bù số 0 cho số 9 chữ số đầu [3,5,7,8,9] do Google Sheet hay format thành số
     assert.strictEqual(normalizePhoneNumber('0388123456'), '0388123456');
   });
 
@@ -25,6 +25,7 @@ test('normalizer: normalizePhoneNumber', async (t) => {
     assert.strictEqual(normalizePhoneNumber(null), null);
     assert.strictEqual(normalizePhoneNumber(undefined), null);
     assert.strictEqual(normalizePhoneNumber('12345'), null);
+    assert.strictEqual(normalizePhoneNumber('123456789'), null); // 9 số nhưng đầu 1 không thuộc dải di động VN
     assert.strictEqual(normalizePhoneNumber('abcdefghij'), null);
     assert.strictEqual(normalizePhoneNumber('09123456789999'), null);
   });
