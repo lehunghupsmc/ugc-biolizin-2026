@@ -242,10 +242,12 @@ module.exports = async function handler(req, res) {
     let linkIdx = headers.findIndex(h => h.includes('link') || h.includes('bài thi') || h.includes('video') || h.includes('url'));
     let statusIdx = headers.findIndex(h => h.includes('thể lệ') || h.includes('trạng thái') || h.includes('duyệt') || h.includes('ghi chú') || h.includes('status') || h.includes('note'));
 
-    // Gán mặc định nếu không có header khớp
-    if (timestampIdx === -1) timestampIdx = 0;
-    if (phoneIdx === -1) phoneIdx = 1;
-    if (linkIdx === -1) linkIdx = 3;
+    // Gán mặc định nếu không có header khớp (theo thứ tự chuẩn range M:Q)
+    if (timestampIdx === -1) timestampIdx = 0; // Cột M
+    if (phoneIdx === -1) phoneIdx = 1;         // Cột N
+    if (platformIdx === -1) platformIdx = 2;   // Cột O
+    if (linkIdx === -1) linkIdx = 3;           // Cột P
+    if (statusIdx === -1) statusIdx = 4;       // Cột Q (Duyệt / Sai thể lệ)
 
     const matchedVideos = [];
 
