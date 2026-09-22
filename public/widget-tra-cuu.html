@@ -1,8 +1,18 @@
-<!-- =======================================================
-  WIDGET TRA CỨU TRẠNG THÁI VIDEO THEO SỐ ĐIỆN THOẠI
-  Dành cho Landing Page Biolizin Creator Challenge
-  Hướng dẫn: Copy toàn bộ đoạn mã này dán vào 1 phần tử HTML trên LadiPage
-======================================================== -->
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tra cứu bài dự thi Biolizin</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 6px;
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
 
 <div id="biolizin-lookup-root">
   <div class="blz-lookup-card">
@@ -374,10 +384,12 @@
     alertBox.textContent = message;
     alertBox.className = "blz-alert blz-alert-" + (type || "info");
     alertBox.style.display = "block";
+    setTimeout(notifyResize, 50);
   }
 
   function hideAlert() {
     alertBox.style.display = "none";
+    setTimeout(notifyResize, 50);
   }
 
   function setLoading(loading) {
@@ -392,6 +404,7 @@
       btnText.style.display = "inline-block";
       spinner.style.display = "none";
     }
+    setTimeout(notifyResize, 50);
   }
 
   function renderVideos(data) {
@@ -457,6 +470,7 @@
     });
 
     resultArea.style.display = "block";
+    setTimeout(notifyResize, 50);
   }
 
   function handleSearch() {
@@ -518,5 +532,20 @@
       handleSearch();
     }
   });
+
+  // Tự động thông báo chiều cao cho trang LadiPage cha nếu nhúng qua Iframe
+  function notifyResize() {
+    if (window.parent && window.parent !== window) {
+      try {
+        var h = document.body.scrollHeight || document.documentElement.scrollHeight;
+        window.parent.postMessage({ type: 'blz-widget-resize', height: h }, '*');
+      } catch (e) {}
+    }
+  }
+
+  window.addEventListener('load', notifyResize);
+  window.addEventListener('resize', notifyResize);
 })();
 </script>
+</body>
+</html>
