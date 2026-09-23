@@ -44,6 +44,13 @@ test('lookup: classifyStatus logic', async (t) => {
 
     const res5 = classifyStatus('Từ chối duyệt');
     assert.strictEqual(res5.status, 'REJECTED');
+
+    const res6 = classifyStatus('Trùng');
+    assert.strictEqual(res6.status, 'REJECTED');
+
+    const res7 = classifyStatus('Sai thể lệ (Thiếu text)');
+    assert.strictEqual(res7.status, 'REJECTED');
+    assert.strictEqual(res7.note, 'Sai thể lệ (Thiếu text)');
   });
 
   await t.test('Các trạng thái Chờ duyệt / Đang duyệt / Chưa duyệt / Cần duyệt lại -> Xếp vào Đang duyệt (không bị nhầm sang Đã duyệt)', () => {

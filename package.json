@@ -7,6 +7,7 @@
     "start": "node src/index.js",
     "scrape": "node src/index.js --action=daily",
     "finalize": "node src/index.js --action=finalize",
+    "export:tiktok": "node scripts/export-tiktok-raw.js",
     "test": "node --test tests/unit/**/*.test.js",
     "test:integration:staging": "node --test tests/integration/**/*.integration.test.js"
   },

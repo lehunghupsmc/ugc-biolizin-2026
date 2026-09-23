@@ -43,6 +43,8 @@ function classifyStatus(colQVal) {
     s.includes('loai') ||
     s.includes('hủy') ||
     s.includes('huy') ||
+    s.includes('trùng') ||
+    s.includes('trung') ||
     s.includes('reject') ||
     s.includes('invalid') ||
     s.includes('disqualified')
@@ -123,8 +125,8 @@ async function getSheetRows() {
   const sheets = googleSheet.getSheetsClient();
   const sourceSheetId = config.GOOGLE_SOURCE_SHEET_ID;
 
-  // Lấy metadata để chọn đúng tab (ưu tiên tab 'gop_du_lieu', nếu không có thì lấy tab đầu tiên)
-  let targetTab = config.SOURCE_TAB_NAME || 'gop_du_lieu';
+  // Lấy metadata để chọn đúng tab (ưu tiên tab config.SOURCE_TAB_NAME || 'Link bài thi', nếu không có thì lấy tab đầu tiên)
+  let targetTab = config.SOURCE_TAB_NAME || 'Link bài thi';
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId: sourceSheetId });
     const sheetTitles = (meta.data.sheets || []).map(s => s.properties.title);
@@ -133,7 +135,7 @@ async function getSheetRows() {
       if (found) {
         targetTab = found;
       } else {
-        const partial = sheetTitles.find(t => t.toLowerCase().includes('gop') || t.toLowerCase().includes('du_lieu'));
+        const partial = sheetTitles.find(t => t.toLowerCase().includes('link') || t.toLowerCase().includes('bài thi') || t.toLowerCase().includes('bai thi') || t.toLowerCase().includes('gop'));
         targetTab = partial || sheetTitles[0];
       }
     }
@@ -141,9 +143,9 @@ async function getSheetRows() {
     console.warn('[API Lookup] Cannot fetch sheet metadata, using default tab:', targetTab, err.message);
   }
 
-  // Thử đọc range M:Q (chuẩn gộp dữ liệu), nếu rỗng hoặc lỗi thì fallback sang A:Z
+  // Thử đọc range B:G (hoặc config.SOURCE_RANGE), nếu rỗng hoặc lỗi thì fallback sang A:Z
   let rows = [];
-  const primaryRange = `'${targetTab}'!${config.SOURCE_RANGE || 'M:Q'}`;
+  const primaryRange = `'${targetTab}'!${config.SOURCE_RANGE || 'B:G'}`;
   try {
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId: sourceSheetId,
@@ -240,14 +242,16 @@ module.exports = async function handler(req, res) {
     let phoneIdx = headers.findIndex(h => h.includes('sđt') || h.includes('điện thoại') || h.includes('phone') || h.includes('số điện thoại'));
     let platformIdx = headers.findIndex(h => h.includes('nền tảng') || h.includes('platform'));
     let linkIdx = headers.findIndex(h => h.includes('link') || h.includes('bài thi') || h.includes('video') || h.includes('url'));
-    let statusIdx = headers.findIndex(h => h.includes('thể lệ') || h.includes('trạng thái') || h.includes('duyệt') || h.includes('ghi chú') || h.includes('status') || h.includes('note'));
+    let statusIdx = headers.findIndex(h => h.includes('nhãn') || h.includes('nhan') || h.includes('check') || h.includes('thể lệ') || h.includes('trạng thái') || h.includes('duyệt') || h.includes('ghi chú') || h.includes('status') || h.includes('note'));
+    let reasonIdx = headers.findIndex(h => h.includes('lý do') || h.includes('ly do') || h.includes('nguyên nhân') || h.includes('reason'));
 
-    // Gán mặc định nếu không có header khớp (theo thứ tự chuẩn range M:Q)
-    if (timestampIdx === -1) timestampIdx = 0; // Cột M
-    if (phoneIdx === -1) phoneIdx = 1;         // Cột N
-    if (platformIdx === -1) platformIdx = 2;   // Cột O
-    if (linkIdx === -1) linkIdx = 3;           // Cột P
-    if (statusIdx === -1) statusIdx = 4;       // Cột Q (Duyệt / Sai thể lệ)
+    // Gán mặc định nếu không có header khớp (theo thứ tự chuẩn B:G)
+    if (timestampIdx === -1) timestampIdx = 0; // Cột B: Thời gian
+    if (phoneIdx === -1) phoneIdx = 1;         // Cột C: SĐT
+    if (platformIdx === -1) platformIdx = 2;   // Cột D: Nền tảng
+    if (linkIdx === -1) linkIdx = 3;           // Cột E: Link bài thi
+    if (statusIdx === -1) statusIdx = 4;       // Cột F: Nhãn check
+    if (reasonIdx === -1 && rows[0] && rows[0].length >= 6) reasonIdx = 5; // Cột G: Lý do
 
     const matchedVideos = [];
 
@@ -280,9 +284,16 @@ module.exports = async function handler(req, res) {
           }
         }
 
-        // Trạng thái kiểm duyệt (chỉ lấy nếu có cột status xác định)
+        // Trạng thái kiểm duyệt và lý do (kết hợp cả 2 cột nếu có lý do)
         const rawStatus = (statusIdx !== -1 && r[statusIdx] !== undefined) ? String(r[statusIdx]).trim() : '';
-        const classification = classifyStatus(rawStatus);
+        const rawReason = (reasonIdx !== -1 && r[reasonIdx] !== undefined) ? String(r[reasonIdx]).trim() : '';
+
+        let combinedStatus = rawStatus;
+        if (rawReason) {
+          combinedStatus = rawStatus ? `${rawStatus} (${rawReason})` : rawReason;
+        }
+
+        const classification = classifyStatus(combinedStatus);
 
         matchedVideos.push({
           stt: matchedVideos.length + 1,
