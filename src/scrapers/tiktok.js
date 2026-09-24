@@ -12,9 +12,12 @@ async function scrapeTikTokBatch(videoUrls) {
     return results;
   }
 
-  const token = config.APIFY_TOKEN;
-  if (!token) {
-    console.warn('[TikTokScraper] APIFY_TOKEN is not set. Marking items as TRANSIENT_ERROR / PENDING.');
+  const tokens = config.APIFY_TIKTOK_TOKENS && config.APIFY_TIKTOK_TOKENS.length > 0
+    ? config.APIFY_TIKTOK_TOKENS
+    : (config.APIFY_TOKEN ? [config.APIFY_TOKEN] : []);
+
+  if (tokens.length === 0) {
+    console.warn('[TikTokScraper] Không có token Apify nào được cấu hình cho TikTok.');
     for (const url of videoUrls) {
       results.set(url, {
         ok: false,
@@ -25,84 +28,99 @@ async function scrapeTikTokBatch(videoUrls) {
     return results;
   }
 
-  const client = new ApifyClient({ token });
+  let lastError = null;
 
-  try {
-    // Chạy Actor clockworks/free-tiktok-scraper
-    const input = {
-      postURLs: videoUrls,
-      commentsPerPost: 0,
-      maxPostsPerQuery: videoUrls.length
-    };
+  for (let tIdx = 0; tIdx < tokens.length; tIdx++) {
+    const currentToken = tokens[tIdx];
+    const client = new ApifyClient({ token: currentToken });
 
-    console.log(`[TikTokScraper] Triggering Apify actor for ${videoUrls.length} videos...`);
-    const run = await client.actor('clockworks/free-tiktok-scraper').call(input);
+    try {
+      const input = {
+        postURLs: videoUrls,
+        commentsPerPost: 0,
+        maxPostsPerQuery: videoUrls.length
+      };
 
-    const { items } = await client.dataset(run.defaultDatasetId).listItems();
+      console.log(`[TikTokScraper] [Token ${tIdx + 1}/${tokens.length}] Triggering Apify actor for ${videoUrls.length} videos...`);
+      const run = await client.actor('clockworks/free-tiktok-scraper').call(input);
 
-    // Map kết quả theo video url hoặc video id
-    for (const item of items) {
-      const webVideoUrl = item.webVideoUrl || item.url || item.inputUrl || '';
-      const id = String(item.id || '');
+      const { items } = await client.dataset(run.defaultDatasetId).listItems();
 
-      // Tìm URL tương ứng trong danh sách videoUrls
-      const matchedUrl = videoUrls.find(u => 
-        (webVideoUrl && u.includes(webVideoUrl)) || 
-        (id && u.includes(id)) || 
-        (item.inputUrl && u === item.inputUrl)
-      ) || webVideoUrl;
+      // Map kết quả theo video url hoặc video id
+      for (const item of items) {
+        const webVideoUrl = item.webVideoUrl || item.url || item.inputUrl || '';
+        const id = String(item.id || '');
 
-      if (matchedUrl) {
-        if (item.error === 'POST_NOT_FOUND_OR_PRIVATE') {
-          results.set(matchedUrl, {
-            ok: false,
-            errorType: config.VIDEO_STATUS.CONFIRMED_UNAVAILABLE,
-            errorMessage: 'Video removed or set to private'
-          });
-        } else if (item.error === 'POST_SENSITIVE') {
-          results.set(matchedUrl, {
-            ok: false,
-            errorType: config.VIDEO_STATUS.CONFIRMED_SENSITIVE,
-            errorMessage: 'Video flagged as sensitive'
-          });
-        } else if (item.error) {
-          results.set(matchedUrl, {
+        const matchedUrl = videoUrls.find(u => 
+          (webVideoUrl && u.includes(webVideoUrl)) || 
+          (id && u.includes(id)) || 
+          (item.inputUrl && u === item.inputUrl)
+        ) || webVideoUrl;
+
+        if (matchedUrl) {
+          if (item.error === 'POST_NOT_FOUND_OR_PRIVATE') {
+            results.set(matchedUrl, {
+              ok: false,
+              errorType: config.VIDEO_STATUS.CONFIRMED_UNAVAILABLE,
+              errorMessage: 'Video removed or set to private'
+            });
+          } else if (item.error === 'POST_SENSITIVE') {
+            results.set(matchedUrl, {
+              ok: false,
+              errorType: config.VIDEO_STATUS.CONFIRMED_SENSITIVE,
+              errorMessage: 'Video flagged as sensitive'
+            });
+          } else if (item.error) {
+            results.set(matchedUrl, {
+              ok: false,
+              errorType: config.VIDEO_STATUS.TRANSIENT_ERROR,
+              errorMessage: item.error
+            });
+          } else {
+            results.set(matchedUrl, {
+              ok: true,
+              data: item
+            });
+          }
+        }
+      }
+
+      for (const url of videoUrls) {
+        if (!results.has(url)) {
+          results.set(url, {
             ok: false,
             errorType: config.VIDEO_STATUS.TRANSIENT_ERROR,
-            errorMessage: item.error
-          });
-        } else {
-          results.set(matchedUrl, {
-            ok: true,
-            data: item
+            errorMessage: 'No data returned from Apify actor'
           });
         }
       }
-    }
 
-    // Các video không trả về kết quả
-    for (const url of videoUrls) {
-      if (!results.has(url)) {
-        results.set(url, {
-          ok: false,
-          errorType: config.VIDEO_STATUS.TRANSIENT_ERROR,
-          errorMessage: 'No data returned from Apify actor'
-        });
-      }
-    }
-  } catch (err) {
-    console.error('[TikTokScraper] Apify batch scrape error:', err.message);
-    // Bất kỳ lỗi HTTP 4xx, 5xx nào ở cấp batch đều là lỗi hạ tầng/network -> TRANSIENT_ERROR
-    const errorType = config.VIDEO_STATUS.TRANSIENT_ERROR;
+      // Đã cào thành công bằng token này, thoát loop
+      return results;
 
-    for (const url of videoUrls) {
-      if (!results.has(url)) {
-        results.set(url, {
-          ok: false,
-          errorType,
-          errorMessage: `Batch error: ${err.message}`
-        });
+    } catch (err) {
+      lastError = err;
+      const isQuota = err.statusCode === 402 || 
+                      (err.message && (err.message.includes('402') || err.message.toLowerCase().includes('quota') || err.message.toLowerCase().includes('credit')));
+      
+      console.warn(`[TikTokScraper] [Token ${tIdx + 1}/${tokens.length}] Lỗi: ${err.message}`);
+      if (isQuota && tIdx < tokens.length - 1) {
+        console.warn(`[TikTokScraper] Hết quota token ${tIdx + 1}, tự động chuyển sang token tiếp theo...`);
+        continue;
       }
+      break;
+    }
+  }
+
+  // Nếu tất cả token đều lỗi
+  console.error('[TikTokScraper] Tất cả token Apify TikTok đều thất bại:', lastError?.message);
+  for (const url of videoUrls) {
+    if (!results.has(url)) {
+      results.set(url, {
+        ok: false,
+        errorType: config.VIDEO_STATUS.TRANSIENT_ERROR,
+        errorMessage: `Batch error: ${lastError?.message || 'Unknown error'}`
+      });
     }
   }
 

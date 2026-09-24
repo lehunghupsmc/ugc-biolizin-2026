@@ -71,10 +71,11 @@ test('Bright Data Lifecycle - should handle starting -> running -> 429 -> ready 
   });
 
   // Ghi đè setTimeout gốc để chạy nhanh hơn (không dùng FakeTimers vì phức tạp với node:test native)
+  const origSetTimeout = setTimeout;
   t.mock.method(global, 'setTimeout', (fn, delay) => {
     // Chuyển delay dài thành delay rất ngắn để test chạy nhanh
     const fastDelay = Math.min(delay, 10); 
-    return Reflect.apply(setTimeout, global, [fn, fastDelay]);
+    return Reflect.apply(origSetTimeout, global, [fn, fastDelay]);
   });
 
   const results = await scrapeFacebookBatch(urls);

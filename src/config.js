@@ -29,8 +29,16 @@ function getServiceAccountCredentials() {
 
 module.exports = {
   // Scraper tokens
-  APIFY_TOKEN: process.env.APIFY_TOKEN || '',
+  APIFY_TOKEN: (process.env.APIFY_TOKEN || '').split(',')[0].trim(),
+  APIFY_TIKTOK_TOKENS: (process.env.APIFY_TIKTOK_TOKENS || process.env.APIFY_TOKEN || '')
+    .split(',')
+    .map(t => t.trim())
+    .filter(Boolean),
   BRIGHTDATA_API_TOKEN: process.env.BRIGHTDATA_API_TOKEN || '',
+  APIFY_FB_TOKENS: (process.env.APIFY_FB_TOKENS || '')
+    .split(',')
+    .map(t => t.trim())
+    .filter(Boolean),
 
   // Google Sheet IDs
   GOOGLE_SOURCE_SHEET_ID: process.env.GOOGLE_SOURCE_SHEET_ID || '13l5zjQa6EoyzyoUHdR0xNFdD7o2urWsFIuGeAPdT-F0',

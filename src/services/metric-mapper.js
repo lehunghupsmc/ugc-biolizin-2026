@@ -67,7 +67,7 @@ function mapFacebookMetrics(item) {
     return { view: null, react: null, comment: null, share: null };
   }
 
-  const rawView = item.video_view_count ?? item.play_count ?? item.views;
+  const rawView = item.play_count ?? item.video_view_count ?? item.views;
 
   // Tính react: ưu tiên likes, hoặc tổng các loại reaction nếu có mảng
   let rawReact = item.likes ?? item.reactions_count;
