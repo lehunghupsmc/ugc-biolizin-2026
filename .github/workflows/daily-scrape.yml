@@ -1,8 +1,8 @@
 name: Daily UGC Contest Tracker
 
 on:
-  #schedule:
-   # - cron: '15 1 * * *'       # 08:15 AM VN (01:15 UTC)
+  schedule:
+    - cron: '15 1 */2 * *'       # 08:15 AM VN (01:15 UTC) - Chạy tự động 2 ngày / lần
   workflow_dispatch:
     inputs:
       action:
@@ -49,6 +49,8 @@ jobs:
         run: node src/index.js --action=${{ github.event.inputs.action || 'daily' }}
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          APIFY_TIKTOK_TOKENS: ${{ secrets.APIFY_TIKTOK_TOKENS }}
+          APIFY_FB_TOKENS: ${{ secrets.APIFY_FB_TOKENS }}
           BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
           GOOGLE_SOURCE_SHEET_ID: ${{ secrets.GOOGLE_SOURCE_SHEET_ID }}
           GOOGLE_INTERNAL_SHEET_ID: ${{ secrets.GOOGLE_INTERNAL_SHEET_ID }}
