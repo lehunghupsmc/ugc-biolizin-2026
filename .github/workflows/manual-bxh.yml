@@ -1,0 +1,56 @@
+name: Manual UGC Leaderboard Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      sync_sheet:
+        description: 'Đồng bộ kết quả sang Google Sheet Public (Tab BXH)'
+        required: true
+        type: boolean
+        default: true
+      file_name:
+        description: 'Tên file ảnh xuất ra (mặc định: bxh-top20.jpg)'
+        required: true
+        default: 'bxh-top20.jpg'
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ugc-contest-manual-bxh
+  cancel-in-progress: false
+
+jobs:
+  update-manual-bxh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Execute Manual BXH Processing
+        run: |
+          SYNC_FLAG="${{ github.event.inputs.sync_sheet == 'true' && '--sync-sheet' || '' }}"
+          FILE_FLAG="--file-name=${{ github.event.inputs.file_name || 'bxh-top20.jpg' }}"
+          node src/manual-bxh.js $SYNC_FLAG $FILE_FLAG
+        env:
+          GOOGLE_SOURCE_SHEET_ID: ${{ secrets.GOOGLE_SOURCE_SHEET_ID }}
+          GOOGLE_PUBLIC_SHEET_ID: ${{ secrets.GOOGLE_PUBLIC_SHEET_ID }}
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+
+      - name: Commit & Push Updated BXH Image
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/${{ github.event.inputs.file_name || 'bxh-top20.jpg' }}
+          git diff --staged --quiet || (git commit -m "Chore: Update Leaderboard Image (Manual BXH) [skip ci]" && git push)

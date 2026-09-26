@@ -8,6 +8,8 @@
     "scrape": "node src/index.js --action=daily",
     "finalize": "node src/index.js --action=finalize",
     "export:tiktok": "node scripts/export-tiktok-raw.js",
+    "export:all": "node scripts/export-ugc-all-raw.js",
+    "bxh:manual": "node src/manual-bxh.js --sync-sheet",
     "test": "node --test tests/unit/**/*.test.js",
     "test:integration:staging": "node --test tests/integration/**/*.integration.test.js"
   },
