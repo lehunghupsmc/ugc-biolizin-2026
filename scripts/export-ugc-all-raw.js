@@ -15,7 +15,7 @@ function parseArgs() {
 
   for (const arg of args) {
     if (arg.startsWith('--input=')) {
-      inputFile = arg.split('=')[1];
+      inputFile = arg.slice(8).replace(/^["']|["']$/g, '');
     } else if (arg.startsWith('--platform=')) {
       platform = arg.split('=')[1].toLowerCase();
     } else if (arg.startsWith('--limit=')) {
