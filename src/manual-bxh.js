@@ -102,7 +102,8 @@ async function processManualBxh(options = {}) {
 
   console.log(`[ManualBXH] 📥 Đang tải dữ liệu từ Sheet ID: ${sourceSheetId} (Tab: '${targetTab}')...`);
 
-  const range = `'${targetTab}'!A:N`;
+  // Đọc từ cột A đến Z để đảm bảo không bị sót cột Post ID mới thêm
+  const range = `'${targetTab}'!A:Z`;
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: sourceSheetId,
     range
@@ -122,6 +123,8 @@ async function processManualBxh(options = {}) {
 
   let timeIdx = headers.findIndex(h => h.includes('thời gian') || h.includes('time') || h.includes('ngày nộp'));
   let phoneIdx = headers.findIndex(h => h.includes('sđt') || h.includes('điện thoại') || h.includes('phone'));
+  let platformIdx = headers.findIndex(h => h.includes('nền tảng') || h.includes('platform'));
+  let linkIdx = headers.findIndex(h => h.includes('link') || h.includes('bài thi') || h.includes('url'));
   let statusIdx = headers.findIndex(h => h.includes('nhãn check') || h.includes('nhan check') || h.includes('trạng thái') || h.includes('duyệt'));
   let nameIdx = headers.findIndex(h => (h.includes('tên') || h.includes('name')) && !h.includes('profile'));
   if (nameIdx === -1) {
@@ -130,20 +133,24 @@ async function processManualBxh(options = {}) {
   let viewIdx = headers.findIndex(h => h.includes('view') || h.includes('lượt xem'));
   let reactIdx = headers.findIndex(h => h.includes('react') || h.includes('tym') || h.includes('thích'));
   let commentIdx = headers.findIndex(h => h.includes('comment') || h.includes('bình luận'));
+  let postIdIdx = headers.findIndex(h => h.includes('post id') || h.includes('postid') || h.includes('post_id') || h.includes('id bài') || h.includes('id video'));
 
   // Fallback về chỉ mục mặc định của sheet 'Link bài thi' nếu không tìm thấy header
   if (timeIdx === -1) timeIdx = 1;     // Cột B: Thời gian
   if (phoneIdx === -1) phoneIdx = 2;    // Cột C: SĐT
+  if (platformIdx === -1) platformIdx = 3;// Cột D: Nền tảng
+  if (linkIdx === -1) linkIdx = 4;      // Cột E: Link bài thi
   if (statusIdx === -1) statusIdx = 5;  // Cột F: Nhãn check
   if (nameIdx === -1) nameIdx = 8;      // Cột I: Tên
   if (viewIdx === -1) viewIdx = 11;     // Cột L: View
   if (reactIdx === -1) reactIdx = 12;   // Cột M: React
   if (commentIdx === -1) commentIdx = 13;// Cột N: Comment
+  if (postIdIdx === -1) postIdIdx = 14; // Cột O: Post id
 
-  console.log(`[ManualBXH] 📌 Cấu hình cột: SĐT [Cột ${phoneIdx + 1}], Nhãn [Cột ${statusIdx + 1}], View [Cột ${viewIdx + 1}], React [Cột ${reactIdx + 1}], Comment [Cột ${commentIdx + 1}]`);
+  console.log(`[ManualBXH] 📌 Cấu hình cột: SĐT [Cột ${phoneIdx + 1}], Nhãn [Cột ${statusIdx + 1}], Post ID [Cột ${postIdIdx + 1}], View [Cột ${viewIdx + 1}], React [Cột ${reactIdx + 1}], Comment [Cột ${commentIdx + 1}]`);
 
-  const contestantsMap = new Map();
-  let totalValidVideos = 0;
+  // BƯỚC 1: LỌC TOÀN BỘ CÁC DÒNG HỢP LỆ VÀO MẢNG TẠM
+  const rawApprovedRows = [];
 
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
@@ -160,47 +167,103 @@ async function processManualBxh(options = {}) {
       continue;
     }
 
-    totalValidVideos++;
-
     const rawTime = r[timeIdx] !== undefined ? String(r[timeIdx]).trim() : '';
     const parsedTime = parseSubmissionTimestamp(rawTime) || 0;
+    const platform = r[platformIdx] !== undefined ? String(r[platformIdx]).trim() : '';
+    const rawLink = r[linkIdx] !== undefined ? String(r[linkIdx]).trim() : '';
     const authorName = r[nameIdx] !== undefined ? String(r[nameIdx]).trim() : '';
     const view = parseMetric(r[viewIdx]);
     const react = parseMetric(r[reactIdx]);
     const comment = parseMetric(r[commentIdx]);
+    const postId = (postIdIdx !== -1 && r[postIdIdx] !== undefined) ? String(r[postIdIdx]).trim() : '';
 
-    if (!contestantsMap.has(normPhone)) {
-      contestantsMap.set(normPhone, {
-        phone: normPhone,
-        phoneMasked: maskPhoneNumber(normPhone),
-        name: authorName || 'Thí sinh',
+    rawApprovedRows.push({
+      rowIndex: i + 1,
+      phone: normPhone,
+      rawPhone,
+      platform,
+      rawLink,
+      authorName,
+      view,
+      react,
+      comment,
+      postId,
+      parsedTime
+    });
+  }
+
+  console.log(`[ManualBXH] 📥 Đã tìm thấy ${rawApprovedRows.length} dòng có trạng thái Hợp lệ.`);
+
+  // BƯỚC 2: SẮP XẾP THEO FIRST-COME FIRST-SERVED (FCFS) ĐỂ BẢO VỆ QUYỀN NỘP TRƯỚC
+  rawApprovedRows.sort((a, b) => {
+    if (a.parsedTime !== b.parsedTime) return a.parsedTime - b.parsedTime;
+    return a.rowIndex - b.rowIndex;
+  });
+
+  // BƯỚC 3: LỌC TRÙNG THEO POST ID (HOẶC URL NẾU KHÔNG CÓ POST ID)
+  const seenPostKeys = new Map();
+  const uniqueVideos = [];
+  let duplicateCount = 0;
+
+  for (const item of rawApprovedRows) {
+    let postKey = '';
+    if (item.postId) {
+      const p = item.platform.toLowerCase();
+      const normP = (p.includes('tiktok') || item.rawLink.includes('tiktok')) ? 'tiktok' : (p.includes('facebook') || p.includes('fb') || item.rawLink.includes('facebook') || item.rawLink.includes('fb.watch')) ? 'fb' : 'post';
+      postKey = `${normP}:${item.postId}`;
+    } else if (item.rawLink) {
+      postKey = item.rawLink.trim();
+    }
+
+    if (postKey) {
+      if (seenPostKeys.has(postKey)) {
+        duplicateCount++;
+        const firstEntry = seenPostKeys.get(postKey);
+        console.log(`[ManualBXH] ⚠️ Bỏ qua video trùng Post ID [${item.postId || postKey}] ở dòng ${item.rowIndex} (SĐT: ${item.phone}). Video này đã được nộp trước ở dòng ${firstEntry.rowIndex} (SĐT: ${firstEntry.phone}).`);
+        continue;
+      }
+      seenPostKeys.set(postKey, item);
+    }
+
+    uniqueVideos.push(item);
+  }
+
+  // BƯỚC 4: GOM NHÓM & CỘNG DỒN CHỈ SỐ THEO TỪNG THÍ SINH (THEO SĐT ĐÃ CHUẨN HÓA)
+  const contestantsMap = new Map();
+
+  for (const v of uniqueVideos) {
+    if (!contestantsMap.has(v.phone)) {
+      contestantsMap.set(v.phone, {
+        phone: v.phone,
+        phoneMasked: maskPhoneNumber(v.phone),
+        name: v.authorName || 'Thí sinh',
         totalView: 0,
         totalReact: 0,
         totalComment: 0,
         videoCount: 0,
-        primaryTimestamp: parsedTime
+        primaryTimestamp: v.parsedTime
       });
     }
 
-    const contestant = contestantsMap.get(normPhone);
-    if (authorName && contestant.name === 'Thí sinh') {
-      contestant.name = authorName;
+    const contestant = contestantsMap.get(v.phone);
+    if (v.authorName && contestant.name === 'Thí sinh') {
+      contestant.name = v.authorName;
     }
 
-    contestant.totalView += view;
-    contestant.totalReact += react;
-    contestant.totalComment += comment;
+    contestant.totalView += v.view;
+    contestant.totalReact += v.react;
+    contestant.totalComment += v.comment;
     contestant.videoCount += 1;
 
-    if (!contestant.primaryTimestamp || (parsedTime && parsedTime < contestant.primaryTimestamp)) {
-      contestant.primaryTimestamp = parsedTime;
+    if (!contestant.primaryTimestamp || (v.parsedTime && v.parsedTime < contestant.primaryTimestamp)) {
+      contestant.primaryTimestamp = v.parsedTime;
     }
   }
 
   const contestants = Array.from(contestantsMap.values());
-  console.log(`[ManualBXH] 📊 Đã lọc thành công: ${totalValidVideos} video Hợp lệ từ ${contestants.length} thí sinh độc lập.`);
+  console.log(`[ManualBXH] 📊 Đã xử lý xong: ${rawApprovedRows.length} video hợp lệ ban đầu -> Loại ${duplicateCount} video trùng Post ID -> Còn ${uniqueVideos.length} video duy nhất từ ${contestants.length} thí sinh độc lập.`);
 
-  // Sắp xếp theo thứ tự ưu tiên chuẩn của cuộc thi:
+  // BƯỚC 5: SẮP XẾP THỨ HẠNG THEO QUY TẮC CHUẨN CỦA CUỘC THI:
   // 1. Tổng View giảm dần
   // 2. Tổng Tương tác (React + Comment) giảm dần
   // 3. Thời gian nộp video đầu tiên sớm hơn đứng trước
@@ -231,7 +294,7 @@ async function processManualBxh(options = {}) {
   });
 
   // In bảng tóm tắt Top 20 ra màn hình Console
-  console.log(`\n🏆 BẢNG XẾP HẠNG TOP 20 (DỮ LIỆU BÁN THỦ CÔNG):`);
+  console.log(`\n🏆 BẢNG XẾP HẠNG TOP 20 (ĐÃ LỌC TRÙNG POST ID):`);
   console.log(`----------------------------------------------------------------------------------`);
   console.log(`| Hạng | SĐT Thí Sinh | Tổng View | Bình Luận | Lượt Thích | Số Video | Tên Gợi Ý |`);
   console.log(`----------------------------------------------------------------------------------`);
@@ -266,7 +329,9 @@ async function processManualBxh(options = {}) {
   return {
     success: true,
     totalRows: rows.length,
-    validVideos: totalValidVideos,
+    rawApprovedRows: rawApprovedRows.length,
+    duplicateCount,
+    validVideos: uniqueVideos.length,
     totalContestants: contestants.length,
     top20: contestants.slice(0, 20),
     imagePath: imageResult.outputPath
