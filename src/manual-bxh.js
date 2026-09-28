@@ -149,6 +149,32 @@ async function processManualBxh(options = {}) {
 
   console.log(`[ManualBXH] 📌 Cấu hình cột: SĐT [Cột ${phoneIdx + 1}], Nhãn [Cột ${statusIdx + 1}], Post ID [Cột ${postIdIdx + 1}], View [Cột ${viewIdx + 1}], React [Cột ${reactIdx + 1}], Comment [Cột ${commentIdx + 1}]`);
 
+  // Đọc thêm tab 'BXH' của Sheet nguồn (nếu có) để dự phòng tra cứu nhãn kiểm duyệt khi cột F ở 'Link bài thi' bị lỗi công thức #REF! hoặc rỗng
+  const bxhFallbackMap = new Map();
+  try {
+    const resBxh = await sheets.spreadsheets.values.get({
+      spreadsheetId: sourceSheetId,
+      range: "'BXH'!A:N"
+    });
+    const bxhRows = resBxh.data.values || [];
+    for (let i = 1; i < bxhRows.length; i++) {
+      const bxhRow = bxhRows[i];
+      const link = bxhRow[4] ? String(bxhRow[4]).trim() : '';
+      const status = bxhRow[5] ? String(bxhRow[5]).trim() : '';
+      const view = bxhRow[11] ? parseMetric(bxhRow[11]) : 0;
+      const react = bxhRow[12] ? parseMetric(bxhRow[12]) : 0;
+      const comment = bxhRow[13] ? parseMetric(bxhRow[13]) : 0;
+      if (link) {
+        bxhFallbackMap.set(link, { status, view, react, comment });
+      }
+    }
+    if (bxhFallbackMap.size > 0) {
+      console.log(`[ManualBXH] ℹ️ Đã nạp ${bxhFallbackMap.size} dòng dữ liệu dự phòng từ tab 'BXH'.`);
+    }
+  } catch (err) {
+    console.warn(`[ManualBXH] ⚠️ Không thể đọc tab 'BXH' dự phòng:`, err.message);
+  }
+
   // BƯỚC 1: LỌC TOÀN BỘ CÁC DÒNG HỢP LỆ VÀO MẢNG TẠM
   const rawApprovedRows = [];
 
@@ -156,7 +182,15 @@ async function processManualBxh(options = {}) {
     const r = rows[i];
     if (!r || r.length === 0) continue;
 
-    const rawStatus = r[statusIdx] !== undefined ? String(r[statusIdx]).trim() : '';
+    const rawLink = r[linkIdx] !== undefined ? String(r[linkIdx]).trim() : '';
+    let rawStatus = r[statusIdx] !== undefined ? String(r[statusIdx]).trim() : '';
+
+    // Dự phòng: Nếu cột F rỗng hoặc lỗi công thức #REF!, tra cứu từ tab 'BXH'
+    const fallbackData = rawLink ? bxhFallbackMap.get(rawLink) : null;
+    if ((!rawStatus || rawStatus.startsWith('#')) && fallbackData && fallbackData.status) {
+      rawStatus = fallbackData.status;
+    }
+
     if (!isRowApproved(rawStatus)) {
       continue;
     }
@@ -170,11 +204,14 @@ async function processManualBxh(options = {}) {
     const rawTime = r[timeIdx] !== undefined ? String(r[timeIdx]).trim() : '';
     const parsedTime = parseSubmissionTimestamp(rawTime) || 0;
     const platform = r[platformIdx] !== undefined ? String(r[platformIdx]).trim() : '';
-    const rawLink = r[linkIdx] !== undefined ? String(r[linkIdx]).trim() : '';
     const authorName = r[nameIdx] !== undefined ? String(r[nameIdx]).trim() : '';
-    const view = parseMetric(r[viewIdx]);
-    const react = parseMetric(r[reactIdx]);
-    const comment = parseMetric(r[commentIdx]);
+    let view = parseMetric(r[viewIdx]);
+    let react = parseMetric(r[reactIdx]);
+    let comment = parseMetric(r[commentIdx]);
+    if (view === 0 && fallbackData && fallbackData.view) view = fallbackData.view;
+    if (react === 0 && fallbackData && fallbackData.react) react = fallbackData.react;
+    if (comment === 0 && fallbackData && fallbackData.comment) comment = fallbackData.comment;
+
     const postId = (postIdIdx !== -1 && r[postIdIdx] !== undefined) ? String(r[postIdIdx]).trim() : '';
 
     rawApprovedRows.push({

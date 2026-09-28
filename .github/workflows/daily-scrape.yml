@@ -1,8 +1,8 @@
 name: Daily UGC Contest Tracker
 
 on:
-  schedule:
-    - cron: '15 1 */2 * *'       # 08:15 AM VN (01:15 UTC) - Chạy tự động 2 ngày / lần
+  # schedule:
+  #   - cron: '15 1 */2 * *'       # 08:15 AM VN (01:15 UTC) - Tạm tắt để chuyển sang chạy Bán thủ công (Phương án 2)
   workflow_dispatch:
     inputs:
       action:
