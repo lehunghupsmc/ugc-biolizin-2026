@@ -43,12 +43,22 @@ function isRowApproved(rawStatus) {
 }
 
 /**
- * Chuyển đổi an toàn chuỗi chỉ số sang số nguyên
+ * Chuyển đổi an toàn chuỗi chỉ số sang số nguyên (có bảo vệ chống dán nhầm URL hoặc ID)
  */
 function parseMetric(val) {
   if (val === undefined || val === null) return 0;
-  const str = String(val).trim().replace(/[^\d]/g, '');
-  return Number(str) || 0;
+  const str = String(val).trim();
+  // Nếu là URL, link ảnh, hoặc chứa ký tự đặc biệt của URL/token
+  if (str.startsWith('http') || str.includes('://') || str.includes('.jpg') || str.includes('.png') || str.includes('~')) {
+    return 0;
+  }
+  const clean = str.replace(/[^\d]/g, '');
+  const num = Number(clean) || 0;
+  // Giới hạn an toàn: một video UGC không thể vượt quá 10 triệu lượt xem (tránh chuỗi ID/token bị dán nhầm)
+  if (num > 10000000) {
+    return 0;
+  }
+  return num;
 }
 
 /**
@@ -164,8 +174,9 @@ async function processManualBxh(options = {}) {
       const view = bxhRow[11] ? parseMetric(bxhRow[11]) : 0;
       const react = bxhRow[12] ? parseMetric(bxhRow[12]) : 0;
       const comment = bxhRow[13] ? parseMetric(bxhRow[13]) : 0;
+      const name = bxhRow[8] ? String(bxhRow[8]).trim() : '';
       if (link) {
-        bxhFallbackMap.set(link, { status, view, react, comment });
+        bxhFallbackMap.set(link, { status, view, react, comment, name });
       }
     }
     if (bxhFallbackMap.size > 0) {
@@ -204,7 +215,10 @@ async function processManualBxh(options = {}) {
     const rawTime = r[timeIdx] !== undefined ? String(r[timeIdx]).trim() : '';
     const parsedTime = parseSubmissionTimestamp(rawTime) || 0;
     const platform = r[platformIdx] !== undefined ? String(r[platformIdx]).trim() : '';
-    const authorName = r[nameIdx] !== undefined ? String(r[nameIdx]).trim() : '';
+    let authorName = r[nameIdx] !== undefined ? String(r[nameIdx]).trim() : '';
+    if ((!authorName || authorName.startsWith('MS4w') || authorName === 'FALSE') && fallbackData && fallbackData.name) {
+      authorName = fallbackData.name;
+    }
     let view = parseMetric(r[viewIdx]);
     let react = parseMetric(r[reactIdx]);
     let comment = parseMetric(r[commentIdx]);

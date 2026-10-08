@@ -34,5 +34,7 @@ test('manual-bxh: parseMetric', async (t) => {
     assert.strictEqual(parseMetric(null), 0);
     assert.strictEqual(parseMetric(undefined), 0);
     assert.strictEqual(parseMetric('abc'), 0);
+    assert.strictEqual(parseMetric('https://p16-common-sign.tiktokcdn-us.com/tos/avatar.jpeg?x=123'), 0);
+    assert.strictEqual(parseMetric('6911504182240281601'), 0); // Quá 10 triệu
   });
 });
